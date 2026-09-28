@@ -1,0 +1,41 @@
+# ---------------------------------------------------------------------------
+# TEOS TRADE AGENT - ignore rules
+# NOTHING in this repository may ever contain credentials.
+# ---------------------------------------------------------------------------
+
+# Secrets (never commit; only .env.example is tracked)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials/
+*.secret
+
+# Runtime state - contains account balances, positions and order history
+data/
+logs/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Worker single-instance locks
+*.lock
+
+# Node
+node_modules/
+npm-debug.log*
+.npm/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

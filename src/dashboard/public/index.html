@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>TEOS Trade Agent - Phase 1 (PAPER)</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="data:,">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="mark">TEOS</span>
+    <span class="title">TRADE AGENT</span>
+    <span class="badge paper" id="mode-badge">PAPER</span>
+  </div>
+  <div class="banner" id="safety-banner">
+    SIMULATION ONLY &middot; no real money &middot; no real account &middot; no live execution adapter
+    &middot; long-only &middot; cash-funded &middot; no leverage &middot; no borrowing
+  </div>
+  <div class="statusline">
+    <span id="health-dot" class="dot unknown" title="worker heartbeat"></span>
+    <span id="health-text">connecting&hellip;</span>
+    <span class="spacer"></span>
+    <span id="stop-flag" class="flag hidden">EMERGENCY STOP</span>
+    <span id="hold-flag" class="flag warn hidden">TRADING HOLD</span>
+    <span id="updated" class="muted">&mdash;</span>
+  </div>
+</header>
+
+<nav id="tabs">
+  <button class="tab active" data-section="account">ACCOUNT</button>
+  <button class="tab" data-section="agent">AGENT</button>
+  <button class="tab" data-section="risk">RISK</button>
+  <button class="tab" data-section="audit">AUDIT</button>
+</nav>
+
+<main>
+  <!-- ---------------------------------------------------------- ACCOUNT -->
+  <section class="panel active" id="panel-account">
+    <div class="cards" id="account-cards"></div>
+
+    <div class="block">
+      <h2>Equity curve</h2>
+      <p class="note" id="equity-note">No equity samples recorded yet.</p>
+      <div class="chartwrap"><canvas id="equity-chart" width="1000" height="220"></canvas></div>
+    </div>
+
+    <div class="cols">
+      <div class="block">
+        <h2>Open positions</h2>
+        <div id="positions" class="scroll"></div>
+      </div>
+      <div class="block">
+        <h2>Market (local simulator)</h2>
+        <div id="market" class="scroll"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------ AGENT -->
+  <section class="panel" id="panel-agent">
+    <div class="cards" id="agent-cards"></div>
+    <div class="cols">
+      <div class="block">
+        <h2>Run</h2>
+        <div id="agent-run" class="kv"></div>
+        <h2>Strategy parameters</h2>
+        <p class="note">Configuration inputs, not performance claims. No strategy here is
+           presented as profitable.</p>
+        <div id="agent-params" class="kv"></div>
+      </div>
+      <div class="block">
+        <h2>Restarts</h2>
+        <div id="agent-restarts" class="scroll"></div>
+        <h2>State transitions</h2>
+        <div id="agent-states" class="scroll"></div>
+        <h2>Backtest runs (separate database)</h2>
+        <div id="agent-backtests" class="scroll"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------- RISK -->
+  <section class="panel" id="panel-risk">
+    <div class="cards" id="risk-cards"></div>
+    <div class="cols">
+      <div class="block">
+        <h2>Hard limits</h2>
+        <div id="risk-limits" class="kv"></div>
+        <h2>Structural guarantees</h2>
+        <div id="risk-policy" class="kv"></div>
+      </div>
+      <div class="block">
+        <h2>Emergency stops</h2>
+        <div id="risk-stops" class="scroll"></div>
+        <h2>In-flight orders (recovered, never resent)</h2>
+        <div id="risk-inflight" class="scroll"></div>
+        <h2>Order / fill reconciliation</h2>
+        <div id="risk-recon" class="scroll"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------ AUDIT -->
+  <section class="panel" id="panel-audit">
+    <div class="cards" id="audit-cards"></div>
+    <div class="block">
+      <h2>Hash chains</h2>
+      <p class="note">Every immutable record carries the hash of the previous record in the
+        same stream. A retroactive edit, deletion or insertion breaks the chain.</p>
+      <div id="audit-chains" class="scroll"></div>
+    </div>
+    <div class="block">
+      <h2>Stream</h2>
+      <div class="subtabs" id="audit-streams">
+        <button class="subtab active" data-stream="orders">Orders</button>
+        <button class="subtab" data-stream="decisions">Agent decisions</button>
+        <button class="subtab" data-stream="riskDecisions">Risk verdicts</button>
+        <button class="subtab" data-stream="sentinelDecisions">Sentinel verdicts</button>
+        <button class="subtab" data-stream="fills">Fills</button>
+        <button class="subtab" data-stream="events">System events</button>
+      </div>
+      <p class="note" id="audit-count"></p>
+      <div id="audit-table" class="scroll tall"></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span id="footer-db" class="muted"></span>
+  <span class="spacer"></span>
+  <span class="muted">Read-only &middot; loopback only &middot; no credentials &middot;
+    control the agent from the CLI (<code>hold</code>, <code>kill-switch</code>,
+    <code>reset-stop</code>)</span>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>

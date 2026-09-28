@@ -1,0 +1,26 @@
+{
+  "name": "teos-trade-agent",
+  "version": "1.0.0-phase1",
+  "private": true,
+  "type": "module",
+  "description": "TEOS Trade Agent - Phase 1: 24/7 autonomous PAPER trading agent. Simulation only. No live trading, no real money, no leverage.",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node src/cli.js worker",
+    "worker": "node src/cli.js worker",
+    "dashboard": "node src/cli.js dashboard",
+    "backtest": "node src/cli.js backtest",
+    "simulate": "node src/cli.js simulate",
+    "status": "node src/cli.js status",
+    "health": "node src/cli.js health",
+    "kill-switch": "node src/cli.js kill-switch",
+    "reset": "node src/cli.js reset-stop",
+    "test": "node --test --test-reporter=spec tests/",
+    "verify": "node scripts/verify.js"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

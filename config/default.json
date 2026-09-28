@@ -1,0 +1,195 @@
+{
+  "configVersion": 1,
+  "profileName": "phase1-paper-defaults",
+  "mode": "PAPER",
+  "disclaimer": "PAPER SIMULATION ONLY. No real money. No leverage. No profitability claim.",
+
+  "account": {
+    "startingCapitalEgp": 500,
+    "baseAsset": "EGP",
+    "quoteAsset": "EGP",
+    "allowNegativeCash": false
+  },
+
+  "risk": {
+    "maxStartingCapitalEgp": 500,
+    "maxLossPerTradeEgp": 5.0,
+    "maxLossPerTradePct": 1.0,
+    "dailyLossLimitEgp": 25.0,
+    "dailyLossLimitPct": 5.0,
+    "maxPortfolioExposureEgp": 250.0,
+    "maxPortfolioExposurePct": 50.0,
+    "maxPositionSizeEgp": 125.0,
+    "maxPositionSizePct": 25.0,
+    "maxOpenPositions": 3,
+    "maxOrdersPerSymbolPerDay": 20,
+    "maxOrdersPerDay": 60,
+    "stopLossRequired": true,
+    "defaultStopDistancePct": 1.5,
+    "minStopDistancePct": 0.25,
+    "maxStopDistancePct": 5.0,
+    "minRiskRewardRatio": 0.8,
+    "priceDeviationLimitBps": 150,
+    "maxSpreadBps": 60,
+    "maxDataStalenessMs": 15000,
+    "degradedDataFreshnessMs": 9000,
+    "consecutiveFailureHaltCount": 3,
+    "haltCooldownMs": 60000,
+    "minOrderNotionalEgp": 5.0
+  },
+
+  "fees": {
+    "makerBps": 10.0,
+    "takerBps": 10.0,
+    "minFeeEgp": 0.05,
+    "settleFeeInCash": true
+  },
+
+  "slippage": {
+    "baseBps": 2.0,
+    "impactBpsPerPctOfLimit": 1.5,
+    "maxBps": 50.0,
+    "applyToMarketOrders": true
+  },
+
+  "market": {
+    "seed": 20260928,
+    "tickMs": 1000,
+    "ticksPerCandle": 30,
+    "warmupCandles": 60,
+    "maxTickJumpBps": 120,
+    "annualVolPct": {
+      "*": 12.0
+    }
+  },
+
+  "execution": {
+    "partialFillProbabilityPct": 65.0,
+    "minFillRatio": 0.15,
+    "maxFillRatio": 0.85,
+    "fillLatencyMs": 120,
+    "rejectsUnknownSymbol": true
+  },
+
+  "sentinel": {
+    "priceDriftReviewBps": 40,
+    "unusualSizeReviewPctOfEquity": 30.0,
+    "unusualSizeReviewEgp": 150.0,
+    "maxDecisionsPerMinute": 20,
+    "exposureWarnPctOfLimit": 80.0,
+    "dailyLossWarnPctOfLimit": 80.0,
+    "freshnessWarnPctOfLimit": 60.0,
+    "wideStopWarnPct": 3.0,
+    "lowConfidenceReview": 0.3,
+    "stopRequiredBlocks": true
+  },
+
+  "worker": {
+    "tickMs": 1000,
+    "heartbeatMs": 5000,
+    "heartbeatStaleAfterMs": 30000,
+    "lockStaleAfterMs": 30000,
+    "maxDecisionsPerTick": 1,
+    "autoResetDailyLossAtUtcMidnight": true,
+    "heartbeatIntervalCycles": 5
+  },
+
+  "dashboard": {
+    "host": "127.0.0.1",
+    "port": 8787,
+    "pollIntervalMs": 2000,
+    "pageSize": 200,
+    "tokenEnvVar": "TEOS_DASHBOARD_TOKEN",
+    "allowNonLoopbackBind": false
+  },
+
+  "strategies": {
+    "enabled": ["sma_cross", "rsi_reversion", "donchian_breakout"],
+    "active": "sma_cross",
+    "params": {
+      "sma_cross": {
+        "fastPeriod": 10,
+        "slowPeriod": 30,
+        "atrPeriod": 14,
+        "stopAtrMultiple": 1.5,
+        "riskPctPerTrade": 0.5,
+        "minConfidence": 0.3
+      },
+      "rsi_reversion": {
+        "rsiPeriod": 14,
+        "oversold": 28,
+        "overbought": 72,
+        "atrPeriod": 14,
+        "stopAtrMultiple": 1.8,
+        "riskPctPerTrade": 0.4,
+        "minConfidence": 0.3
+      },
+      "donchian_breakout": {
+        "entryPeriod": 20,
+        "exitPeriod": 10,
+        "atrPeriod": 14,
+        "stopAtrMultiple": 2.0,
+        "riskPctPerTrade": 0.4,
+        "minConfidence": 0.3
+      }
+    }
+  },
+
+  "instruments": [
+    {
+      "symbol": "USD/EGP",
+      "kind": "spot",
+      "startPrice": 48.75,
+      "annualVolPct": 8.0,
+      "tickSize": 0.0001,
+      "qtyStep": 0.01,
+      "minQty": 0.01,
+      "spreadBpsMin": 2.0,
+      "spreadBpsMax": 25.0
+    },
+    {
+      "symbol": "EUR/EGP",
+      "kind": "spot",
+      "startPrice": 53.2,
+      "annualVolPct": 9.0,
+      "tickSize": 0.0001,
+      "qtyStep": 0.01,
+      "minQty": 0.01,
+      "spreadBpsMin": 3.0,
+      "spreadBpsMax": 30.0
+    },
+    {
+      "symbol": "GOLD/XAU",
+      "kind": "spot",
+      "startPrice": 4150.0,
+      "annualVolPct": 16.0,
+      "tickSize": 0.01,
+      "qtyStep": 0.001,
+      "minQty": 0.001,
+      "spreadBpsMin": 5.0,
+      "spreadBpsMax": 45.0
+    },
+    {
+      "symbol": "SILVER/XAG",
+      "kind": "spot",
+      "startPrice": 47.5,
+      "annualVolPct": 24.0,
+      "tickSize": 0.001,
+      "qtyStep": 0.01,
+      "minQty": 0.01,
+      "spreadBpsMin": 8.0,
+      "spreadBpsMax": 90.0
+    },
+    {
+      "symbol": "TEOS/IDX",
+      "kind": "index",
+      "startPrice": 1250.0,
+      "annualVolPct": 20.0,
+      "tickSize": 0.01,
+      "qtyStep": 0.01,
+      "minQty": 0.01,
+      "spreadBpsMin": 4.0,
+      "spreadBpsMax": 35.0
+    }
+  ]
+}
