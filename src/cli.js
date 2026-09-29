@@ -78,7 +78,7 @@ COMMANDS
   health              Print the heartbeat probe and latched stops
   kill-switch         Latch an emergency stop; refuses all new orders
   reset-stop          Clear a latched emergency stop
-  hold                Set the TRADING_HOLD flag (blocks entries, allows exits)
+  hold                Set the TRADING_HOLD flag (blocks ALL orders, exits included)
   resume              Clear the TRADING_HOLD flag
   verify              Run the integrity checks over a mode's database
 
@@ -334,7 +334,10 @@ async function cmdHold(opts) {
     message: `TRADING_HOLD set to ${value}.`, details: { value },
   });
   console.log(value === 'true'
-    ? 'TRADING_HOLD engaged: new entries are blocked. Risk-reducing exits are still allowed.'
+    ? 'TRADING_HOLD engaged: ALL orders are blocked, including risk-reducing exits.\n'
+      + '  WARNING: there is no reduce-only exemption. A stop-loss that triggers while the hold is on cannot\n'
+      + '  execute, and the blocked exit latches a STOP_EXIT_BLOCKED emergency stop. Do not hold through a\n'
+      + '  position you intend to keep - close it first, or use the emergency stop to refuse new orders instead.'
     : 'TRADING_HOLD cleared: the agent may open new positions again.');
   db.close();
 }

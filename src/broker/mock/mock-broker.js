@@ -41,6 +41,8 @@ export class MockBroker {
   #failure = null;
   #quotes = new Map();
   #ticksSinceCandle = 0;
+  #instruments = new Map();
+  #abnormalApplied = false;
 
   constructor({ config, clock, repos, account, mode = 'PAPER', seed = null, onFill = null, onEvent = null, marketSource = null }) {
     if (mode === 'LIVE') {
@@ -57,6 +59,7 @@ export class MockBroker {
     this.#onEvent = onEvent;
 
     const instruments = new Map(config.instruments.map((i) => [i.symbol, i]));
+    this.#instruments = instruments;
     this.#rng = new Rng(seed ?? config.market.seed);
     // The market SOURCE is the only thing that differs between paper trading
     // and backtesting. Everything downstream of here - the matching engine, the
@@ -122,16 +125,66 @@ export class MockBroker {
    * in exact agreement.
    */
   #fillGuard(order, proposedQty) {
-    if (order.side !== 'SELL') return { allowed: true, quantity: proposedQty, reason: null };
-    const pos = this.#account.positionFor(order.symbol);
-    const available = pos ? pos.quantity : 0;
-    if (!(available > 0)) {
-      return { allowed: false, quantity: 0, reason: 'NO_POSITION_TO_SELL' };
+    if (order.side === 'SELL') {
+      const pos = this.#account.positionFor(order.symbol);
+      const available = pos ? pos.quantity : 0;
+      if (!(available > 0)) {
+        return { allowed: false, quantity: 0, reason: 'NO_POSITION_TO_SELL' };
+      }
+      if (proposedQty > available + 1e-9) {
+        return { allowed: true, quantity: available, reason: 'FILL_CAPPED_TO_AVAILABLE_LONG' };
+      }
+      return { allowed: true, quantity: proposedQty, reason: null };
     }
-    if (proposedQty > available + 1e-9) {
-      return { allowed: true, quantity: available, reason: 'FILL_CAPPED_TO_AVAILABLE_LONG' };
+
+    // BUY: the fill must be payable from cash on hand.
+    //
+    // Without this the broker accepts a BUY it cannot fund, and the failure
+    // surfaces much later - inside `#settle`, from the ledger's own refusal to
+    // go negative. The order is then CANCELED with
+    // `SETTLEMENT_FAILED:INSUFFICIENT_BALANCE`, which is misleading: it reads
+    // as an infrastructure fault rather than the order being unfundable, and
+    // it increments `consecutiveFailures`, which is the counter that drives the
+    // CONNECTION rule's halt. An over-budget order therefore masquerades as a
+    // failing exchange and can stop trading for a condition that is purely
+    // arithmetic.
+    //
+    // Capping to what cash can cover is the same treatment a SELL gets when the
+    // long is smaller than the order: fill what is affordable, cancel the
+    // remainder, and record why.
+    const price = Number.isFinite(order.expectedPrice) && order.expectedPrice > 0
+      ? order.expectedPrice
+      : null;
+    if (price == null) return { allowed: true, quantity: proposedQty, reason: null };
+
+    const affordable = this.#affordableQuantity(order.symbol, price);
+    if (!(affordable > 0)) {
+      return { allowed: false, quantity: 0, reason: 'INSUFFICIENT_CASH_TO_FILL' };
+    }
+    if (proposedQty > affordable + 1e-9) {
+      return { allowed: true, quantity: affordable, reason: 'FILL_CAPPED_TO_AVAILABLE_CASH' };
     }
     return { allowed: true, quantity: proposedQty, reason: null };
+  }
+
+  /**
+   * Largest quantity of `symbol` buyable at `price` with cash on hand, net of
+   * the taker fee and allowing for slippage. Rounded DOWN to the instrument's
+   * quantity step, because a step-rounded-up quantity is not affordable.
+   */
+  #affordableQuantity(symbol, price) {
+    const inst = this.#instruments.get(symbol) ?? null;
+    const step = inst?.qtyStep && inst.qtyStep > 0 ? inst.qtyStep : 0.01;
+    const cash = this.#account.cashEgp;
+    if (!(cash > 0)) return 0;
+
+    // Worst-case cost of one unit: the price plus the fee and a full slippage
+    // allowance, so the cap cannot be exceeded by the fill actually pricing
+    // slightly above `expectedPrice`.
+    const worstCaseUnit = price * (1 + (this.#config.slippage.maxBps + this.#config.fees.takerBps) / 10_000);
+    const raw = cash / worstCaseUnit;
+    const qty = roundTo(Math.floor(raw / step) * step, 8);
+    return Number.isFinite(qty) && qty > 0 ? qty : 0;
   }
 
   // ------------------------------------------------------------ lifecycle
@@ -200,6 +253,7 @@ export class MockBroker {
     this.#failure = null;
     this.#consecutiveFailures = 0;
     this.#connected = true;
+    this.#abnormalApplied = false;
     return this.health();
   }
 
@@ -224,6 +278,32 @@ export class MockBroker {
     } catch (err) {
       this.#recordFailure(err);
       throw err;
+    }
+
+    // ABNORMAL_PRICE: corrupt ONE symbol's quote by a jump far beyond
+    // `market.maxTickJumpBps`, leaving the rest of the feed intact.
+    //
+    // This injection point was documented on the class and honoured by
+    // DISCONNECT and DATA_STALL, but had no implementation: `injectFailure`
+    // accepted it and then nothing happened, so any test of the "abnormal
+    // price" path silently passed against an unperturbed market. Fault
+    // injection that does not inject is worse than none at all - it is a green
+    // test that proves nothing.
+    //
+    // The shock MUST be applied before the loop below, which stores each quote
+    // by symbol. Mutating the array inside the loop appears to work and then
+    // does not: the iterator has already yielded the original element, so the
+    // uncorrupted quote is written back and overwrites the shock.
+    if (this.#failure?.type === 'ABNORMAL_PRICE' && !this.#abnormalApplied) {
+      const target = this.#failure.symbol ?? this.simulator.symbols()[0];
+      const jumpBps = this.#failure.bps ?? 10 * this.#config.market.maxTickJumpBps;
+      const shocked = this.simulator.forceJump(target, jumpBps);
+      if (shocked) {
+        this.#abnormalApplied = true;
+        const i = quotes.findIndex((x) => x.symbol === target);
+        if (i >= 0) quotes[i] = shocked;
+        else quotes.push(shocked);
+      }
     }
 
     const now = this.#clock.now();

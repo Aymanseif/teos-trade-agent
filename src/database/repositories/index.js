@@ -33,6 +33,33 @@ export class Repos {
     return this;
   }
 
+  /**
+   * Write a sealed row, and re-synchronise the audit chain if the write fails.
+   *
+   * `chain.seal()` advances an in-memory cursor BEFORE the row reaches the
+   * database, because the hash has to exist before the row that carries it. A
+   * write that is then refused - a duplicate primary key, a foreign key, a
+   * full disk - therefore leaves the cursor pointing at a hash that was never
+   * stored, and every later record links to that phantom. The database is
+   * untouched and completely intact, yet `verify()` reports
+   * "prev_hash mismatch (record removed or reordered)" from then on, for the
+   * rest of the process.
+   *
+   * That is the one failure mode a tamper-evident log must never produce: a
+   * chain that always reports "broken" is worse than no chain at all, because
+   * it trains the operator to ignore it. Dropping the cursor cache makes the
+   * next `seal()` re-read the last genuinely stored hash, which is what a fresh
+   * process would do anyway. Correctness wins over the saved query.
+   */
+  #writeSealed(sql, ...params) {
+    try {
+      return this.db.run(sql, ...params);
+    } catch (err) {
+      this.chain.reset();
+      throw err;
+    }
+  }
+
   // ------------------------------------------------------------------ runs
   createRun({ runId = newId('run'), mode = this.mode, instanceId = this.instanceId, strategyId, startingCapitalEgp, config, clock, notes = null }) {
     this.db.run(
@@ -150,7 +177,7 @@ export class Repos {
       stop_condition: d.stopCondition, action: d.action, agent_state: d.agentState,
     };
     const sealed = this.chain.seal(STREAMS.DECISION, this.mode, record);
-    this.db.run(
+    this.#writeSealed(
       `INSERT INTO agent_decisions
         (decision_id, run_id, mode, instance_id, ts, ts_ms, symbol, strategy_id, price, signal, quantity,
          notional_egp, confidence, max_loss_egp, stop_price, stop_distance_pct, risk_reward_ratio, reason,
@@ -203,7 +230,7 @@ export class Repos {
       failed_count: r.failedCount, rules_json: J(r.rules), account_json: J(r.account), limits_json: J(r.limits),
     };
     const sealed = this.chain.seal(STREAMS.RISK, this.mode, record);
-    this.db.run(
+    this.#writeSealed(
       `INSERT INTO risk_decisions
         (risk_decision_id, decision_id, run_id, mode, instance_id, ts, ts_ms, verdict, blocked, reason,
          failed_rule, passed_count, failed_count, rules_json, account_json, limits_json, prev_hash, record_hash)
@@ -238,7 +265,7 @@ export class Repos {
       policy_version: s.policyVersion, rules_json: J(s.rules), threshold_json: J(s.thresholds),
     };
     const sealed = this.chain.seal(STREAMS.SENTINEL, this.mode, record);
-    this.db.run(
+    this.#writeSealed(
       `INSERT INTO sentinel_decisions
         (sentinel_decision_id, decision_id, risk_decision_id, run_id, mode, instance_id, ts, ts_ms, verdict,
          action_taken, reason, trigger_rule, policy_version, rules_json, threshold_json, prev_hash, record_hash)
@@ -285,7 +312,7 @@ export class Repos {
       status_at_submit: o.status,
     };
     const sealed = this.chain.seal(STREAMS.ORDER, this.mode, record);
-    this.db.run(
+    this.#writeSealed(
       `INSERT INTO orders
         (order_id, client_order_id, decision_id, risk_decision_id, sentinel_decision_id, run_id, mode, instance_id,
          symbol, side, order_type, quantity, limit_price, expected_price, filled_quantity, avg_fill_price, status,

@@ -14,10 +14,29 @@
 
 export const MINOR_UNITS_PER_EGP = 100;
 
-/** EGP (double) -> integer piastres. */
+/**
+ * EGP (double) -> integer piastres.
+ *
+ * `Math.round` breaks a half-piastre tie toward +Infinity, for BOTH signs.
+ * That is deterministic and reproducible, which is what a ledger requires, but
+ * it is NOT sign-antisymmetric: `roundEgp(0.005) === 0.01` while
+ * `roundEgp(-0.005) === 0`, so a value and its negation both move toward
+ * positive. Two consequences, both bounded and both safe for this system:
+ * a value and its negation can never BOTH gain (the pair differs from zero by at
+ * most one piastre, always in the same direction), and rounding can never flip a
+ * sign, so no rounding step can conjure negative cash.
+ *
+ * NOTE: `roundTo` in this same file rounds half AWAY FROM ZERO instead. The two
+ * rounders therefore disagree on the tie rule, and this one is deliberately left
+ * as it is: changing it would re-round every stored piastre in every existing
+ * database. Long-only, cash-funded operation means negative cash cannot arise
+ * through normal use, so the divergence cannot affect a balance or a fill; its
+ * only exposure is that a loss landing on an exact half-piastre rounds toward
+ * zero and reports marginally optimistically. Reconcile only alongside a
+ * deliberate decision to migrate stored figures.
+ */
 export function toMinor(egp) {
   if (!Number.isFinite(egp)) throw new TypeError(`toMinor: not finite: ${egp}`);
-  // Math.round handles .5 upward, deterministic for both signs.
   return Math.round(egp * MINOR_UNITS_PER_EGP);
 }
 
@@ -30,6 +49,9 @@ export function fromMinor(minor) {
 /** Round a money-ish double to 2 decimals (piastre resolution) as a number. */
 export function roundEgp(egp) {
   if (!Number.isFinite(egp)) throw new TypeError(`roundEgp: not finite: ${egp}`);
+  // Same tie rule as `toMinor` above, and therefore the same one-way bias: half
+  // piastres go toward +Infinity for both signs. See that note before assuming
+  // this is symmetric about zero - it is not, unlike `roundTo`.
   return Math.round(egp * MINOR_UNITS_PER_EGP) / MINOR_UNITS_PER_EGP;
 }
 

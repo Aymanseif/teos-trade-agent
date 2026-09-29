@@ -172,9 +172,19 @@ export class AuditChain {
  *
  * In `seal` a missing column is an error: it means the caller built a record
  * that is not the one the chain is defined over, and sealing it anyway would
- * produce a chain that `verify` could never reproduce. In `verify` the columns
- * come from a real row, so `status_at_submit` (a seal-time-only projection of
- * `status`) and any other such name are simply skipped.
+ * produce a chain that `verify` could never reproduce.
+ *
+ * In `verify`, `tolerateMissing` lets a column that is ABSENT from the record
+ * be skipped rather than thrown on, so one absent name degrades the check to the
+ * columns that are present instead of failing the whole audit. It is a
+ * leniency for a missing name, NOT a rule about seal-time-only columns.
+ *
+ * `status_at_submit` is the column that made this comment worth correcting: it
+ * was previously named here as an example of a seal-time projection that
+ * `verify` skips, which is backwards. It is a real `NOT NULL` column, it is in
+ * `STREAM_COLUMNS`, and it is hashed on both sides - it exists so the status an
+ * order was SUBMITTED with stays provable after the row's live `status` moves
+ * on. A row read from the database always carries it, so it is never skipped.
  */
 function project(stream, record, { tolerateMissing = false } = {}) {
   const columns = STREAM_COLUMNS[stream];

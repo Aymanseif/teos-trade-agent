@@ -96,6 +96,24 @@ export class RiskEngine {
    */
   proposeOrder({ decision, account, quote, instrument }) {
     const limits = this.#limits;
+
+    // An unknown instrument must reach ORDER_VALID so it can be refused as a
+    // CATASTROPHIC condition that latches a stop. Without this guard the very
+    // next thing to touch `instrument` is `sizePosition({ qtyStep:
+    // instrument.qtyStep })`, which throws a bare TypeError; the firewall then
+    // reports FAILED with code UNKNOWN, no rule ever fires, and nothing latches.
+    // The order is still refused - it fails closed - but the diagnosis is wrong
+    // and the operator is told nothing about a misconfigured or hallucinated
+    // symbol.
+    if (!instrument) {
+      return {
+        side: decision.signal === 'SELL' ? 'SELL' : 'BUY',
+        quantity: 0, notionalEgp: 0, stopPrice: null,
+        riskAtStopEgp: 0, riskBudgetEgp: 0,
+        expectedExecutionPrice: null, reason: 'UNKNOWN_INSTRUMENT',
+      };
+    }
+
     const price = quote.mid;
     const feeBps = this.#config.fees.takerBps;
     const expectedSlippageBps = Math.min(quote.spreadBps / 2 + this.#config.slippage.baseBps, this.#config.slippage.maxBps);

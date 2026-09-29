@@ -18,7 +18,9 @@
     "health": "node src/cli.js health",
     "kill-switch": "node src/cli.js kill-switch",
     "reset": "node src/cli.js reset-stop",
-    "test": "node --test --test-reporter=spec tests/",
+    "hold": "node src/cli.js hold",
+    "resume": "node src/cli.js resume",
+    "test": "node --test --test-reporter=spec \"tests/*.test.js\"",
     "verify": "node scripts/verify.js"
   },
   "dependencies": {},

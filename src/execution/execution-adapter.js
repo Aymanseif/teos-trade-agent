@@ -119,7 +119,17 @@ export class ExecutionAdapter {
     }
 
     // Last-chance kill-switch check immediately before the call.
-    const activeStop = this.#repos.activeStop();
+    //
+    // `sessionStop()`, never `activeStop()`. This is the ONE place below the
+    // firewall that can still refuse an order, so it must consult exactly the
+    // same stop the worker's kill switch and the agent's evaluation gate consult
+    // - `Repos.sessionStop()` is the single place that decides stop scoping. An
+    // unscoped `activeStop()` is BROADER than both: in BACKTEST a run inherited
+    // the stop an earlier backtest had latched, so the run latched nothing,
+    // halted on nothing and reported the stop as the reason it could not trade.
+    // A refused order is never a safe default, but an order refused for another
+    // run's stop is simply wrong.
+    const activeStop = this.#repos.sessionStop();
     if (activeStop) {
       throw new EmergencyStopError(
         `Emergency stop is active (${activeStop.trigger}); refusing to submit ${cid}.`,

@@ -39,8 +39,24 @@ import { makeView, snapshot, section, SECTIONS, AUDIT_STREAMS } from './api.js';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(HERE, 'public');
 
-/** Hosts the dashboard is permitted to bind. Anything else is a hard error. */
-export const LOOPBACK_HOSTS = Object.freeze(['127.0.0.1', '::1', 'localhost', '[::1]']);
+/**
+ * The literal hosts advertised as bind targets.
+ *
+ * This list is DOCUMENTATION, not enforcement. `isLoopbackHost()` is what the
+ * constructor and the post-bind check actually call, and it is deliberately
+ * broader than this list - it accepts all of 127.0.0.0/8, not just 127.0.0.1.
+ * The list exists so an operator can see the exact literal values that are safe
+ * to put in `dashboard.host`.
+ *
+ * `'localhost'` used to appear here and was WRONG. The check never resolves a
+ * name, so `dashboard.host: "localhost"` was a hard error at startup while this
+ * constant advertised the value as permitted. Nothing enforces from this list,
+ * so the failure direction was the safe one - it refused - but a constant that
+ * advertises a value the code rejects is a trap for the next reader, and
+ * failing safe is not a defence against being wrong about what is permitted.
+ * A name is not accepted here; only literals are.
+ */
+export const LOOPBACK_HOSTS = Object.freeze(['127.0.0.1', '::1', '[::1]']);
 
 export function isLoopbackHost(host) {
   const h = String(host).toLowerCase();

@@ -284,7 +284,15 @@ export function riskSection(view) {
       : { engaged: false },
     tradingHold: {
       engaged: hold,
-      effect: hold ? 'new entries blocked; risk-reducing exits still allowed' : 'entries allowed',
+      // Stated as it behaves, not as it was once documented. MANUAL_HOLD has no
+      // reduce-only exemption: it blocks every order, so claiming otherwise here
+      // would tell an operator watching the dashboard that a stop-loss can still
+      // execute while it cannot. A blocked exit latches a STOP_EXIT_BLOCKED
+      // emergency stop, so the wording is deliberately blunt.
+      effect: hold
+        ? 'ALL orders blocked, including risk-reducing exits (no reduce-only exemption); a stop-loss '
+          + 'triggered during a hold cannot execute and latches a STOP_EXIT_BLOCKED emergency stop'
+        : 'entries allowed',
     },
     stopHistory: stops.map((s) => ({
       stopId: s.stop_id, trigger: s.trigger, severity: s.severity, active: s.active === 1,
@@ -336,17 +344,31 @@ export function auditSection(view, { limit = 200 } = {}) {
 /** Build a view object. The server owns the lifetime of `db`, `chain`, `repos`. */
 export function makeView({ config, repos, chain, mode }) {
   const latest = repos.latestRun(mode);
-  return {
-    config,
-    repos,
-    chain,
-    mode,
-    // BACKTEST runs are isolated experiments and must be read run-scoped; PAPER
-    // is one continuous account, so it reads the whole mode. This mirrors
-    // `Repos.sessionStop()` exactly - a dashboard that disagreed with the
-    // engine about scope would display another run's verdicts.
-    scopeRunId: mode === 'BACKTEST' ? latest?.run_id ?? null : null,
-  };
+  // BACKTEST runs are isolated experiments and must be read run-scoped; PAPER
+  // is one continuous account, so it reads the whole mode. This mirrors
+  // `Repos.sessionStop()` exactly - a dashboard that disagreed with the
+  // engine about scope would display another run's verdicts.
+  const scopeRunId = mode === 'BACKTEST' ? latest?.run_id ?? null : null;
+
+  // A SIDE EFFECT, and the reason it lives here instead of at each call site.
+  // `Repos.sessionStop()` decides its scope from `repos.runId`, and it is the
+  // single place that does. Every emergency-stop consumer on this server - the
+  // risk section below, and `#health()` in server.js - reads it through that
+  // method and has no runId of its own to pass. Leaving `repos.runId` null made
+  // `sessionStop()` fall through to the UNSCOPED query, because a null runId is
+  // indistinguishable from "no scoping requested": the page then showed one
+  // run's decisions, orders and fills next to whichever run in the same mode
+  // most recently latched a stop. The scope this view had already computed was
+  // simply not reaching the one query that needed it. Setting it once here
+  // makes the repository agree with `scopeRunId` for every current and future
+  // reader, which is the only way to keep the engine and the display from
+  // disagreeing about which run they are describing.
+  //
+  // For PAPER this stores null, which is correct: one continuous account, and
+  // any active stop in that mode must be honoured.
+  repos.setRun(scopeRunId);
+
+  return { config, repos, chain, mode, scopeRunId };
 }
 
 /**

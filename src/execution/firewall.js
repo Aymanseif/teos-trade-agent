@@ -115,7 +115,16 @@ export class ExecutionFirewall {
         ...base,
         outcome: 'BLOCKED',
         riskVerdict,
-        reason: proposal.reason ?? decision.signal === 'HOLD' ? 'HOLD' : 'NO_EXECUTABLE_QUANTITY',
+        // The parentheses are load-bearing. `??` binds LOOSER than `===`, so
+        // without them this reads
+        //   (proposal.reason ?? (signal === 'HOLD')) ? 'HOLD' : 'NO_EXECUTABLE_QUANTITY'
+        // and every refusal that carries a reason - 'UNKNOWN_INSTRUMENT', say -
+        // has a truthy condition, so it was reported as `reason: 'HOLD'`: the
+        // operator was told the agent had chosen to hold, when the order was
+        // actually refused for having no executable quantity. `detail` on the
+        // next line was always correct, which is what made the mismatch
+        // readable rather than merely wrong.
+        reason: proposal.reason ?? (decision.signal === 'HOLD' ? 'HOLD' : 'NO_EXECUTABLE_QUANTITY'),
         detail: proposal.reason ?? 'no executable quantity',
       };
     }

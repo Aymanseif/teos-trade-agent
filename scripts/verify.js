@@ -66,6 +66,47 @@ export async function runVerification({ mode = 'PAPER', configPath = null } = {}
   const orders = db.all('SELECT * FROM orders WHERE mode = ? ORDER BY submitted_ms ASC, rowid ASC', mode);
   const positions = db.all('SELECT * FROM positions WHERE mode = ? ORDER BY opened_ms ASC, rowid ASC', mode);
 
+  // ---- ledger scope --------------------------------------------------------
+  //
+  // Two kinds of check live in this file, and only one of them needs scoping.
+  //
+  // ROW-LOCAL checks judge each row against itself: equity == cash + exposure on
+  // a single balance, an order against its own fills, a fill against its own
+  // order, a hash chain against its own links. Every row of the mode is
+  // independently meaningful, so all of them stay mode-wide and get STRICTLY
+  // more coverage from it. Nothing below is narrowed.
+  //
+  // LEDGER checks instead assume ONE continuous account with ONE opening
+  // balance: "starting capital + every fill == ledger cash", and "fills net to
+  // the open position". That is true of PAPER, which is a single long-lived
+  // account, and false of BACKTEST, where every run is an independent experiment
+  // that starts from the configured capital and books its own fills - and
+  // `saveBacktest` APPENDS to the same tables, so the mode accumulates one such
+  // ledger per run.
+  //
+  // Applied mode-wide, six backtests that each end holding 0.1 TEOS give net
+  // fills of 0.6 against an open position of 0.1, and the checker reports a
+  // reconciliation failure and a cash failure for ledgers that are perfectly
+  // correct. It is not a near-miss: the second backtest ever run makes
+  // `verify --mode BACKTEST` exit non-zero, permanently, with no way to pass.
+  // A verifier that cries wolf is worse than no verifier, because it teaches the
+  // operator to read FAIL as noise - the same argument that motivated the audit
+  // chain's phantom-break fix.
+  //
+  // So the ledger is scoped exactly the way the dashboard scopes its view: to the
+  // latest run for BACKTEST, to the whole mode for PAPER.
+  const scopeRunId = mode === 'BACKTEST' ? (repos.latestRun(mode)?.run_id ?? null) : null;
+  const ledger = (table, order) => (scopeRunId
+    ? db.all(`SELECT * FROM ${table} WHERE mode = ? AND run_id = ? ORDER BY ${order}`, mode, scopeRunId)
+    : db.all(`SELECT * FROM ${table} WHERE mode = ? ORDER BY ${order}`, mode));
+  const ledgerBalances = ledger('balances', 'ts_ms ASC, id ASC');
+  const ledgerFills = ledger('fills', 'ts_ms ASC, rowid ASC');
+  const ledgerPositions = ledger('positions', 'opened_ms ASC, rowid ASC');
+  const scopeNote = scopeRunId
+    ? `scoped to the latest of ${db.get('SELECT COUNT(*) AS c FROM runs WHERE mode = ?', mode).c} `
+      + `BACKTEST run(s), ${scopeRunId}; `
+    : 'scoped to the whole PAPER account; ';
+
   // ---- 1. equity invariant -------------------------------------------------
   let worstEquity = 0;
   let worstEquityAt = null;
@@ -81,15 +122,15 @@ export async function runVerification({ mode = 'PAPER', configPath = null } = {}
       : `max |equity - (cash + exposure)| = ${worstEquity.toFixed(6)} EGP over ${balances.length} rows${worstEquityAt ? ` (worst at ${worstEquityAt})` : ''}`);
 
   // ---- 2. cash reconstruction ---------------------------------------------
-  const lastBalance = balances.length ? balances[balances.length - 1] : null;
+  const lastBalance = ledgerBalances.length ? ledgerBalances[ledgerBalances.length - 1] : null;
   if (lastBalance) {
     const startMinor = Math.round(config.account.startingCapitalEgp * 100);
-    const expected = fromMinor(startMinor + reconstructCash(fills));
+    const expected = fromMinor(startMinor + reconstructCash(ledgerFills));
     const delta = Math.abs(lastBalance.cash_egp - expected);
     check(results, 'cash reconstructs exactly from the fill log',
       delta < EPS,
       `fills imply EGP ${expected.toFixed(2)}, ledger says EGP ${lastBalance.cash_egp.toFixed(2)} `
-      + `(delta ${delta.toFixed(4)} EGP over ${fills.length} fills)`);
+      + `(delta ${delta.toFixed(4)} EGP over ${ledgerFills.length} fills, ${scopeNote}one opening balance)`);
   } else {
     check(results, 'cash reconstructs exactly from the fill log', true, 'no balance rows yet');
   }
@@ -129,12 +170,12 @@ export async function runVerification({ mode = 'PAPER', configPath = null } = {}
   // stops matching its own fill history and the difference appears as cash that
   // was never earned.
   const netBySymbol = new Map();
-  for (const f of fills) {
+  for (const f of ledgerFills) {
     const signed = f.side === 'BUY' ? f.quantity : -f.quantity;
     netBySymbol.set(f.symbol, (netBySymbol.get(f.symbol) ?? 0) + signed);
   }
   const openBySymbol = new Map();
-  for (const p of positions) {
+  for (const p of ledgerPositions) {
     if (p.status !== 'OPEN') continue;
     if (openBySymbol.has(p.symbol)) {
       openBySymbol.set(p.symbol, NaN); // flagged below as a duplicate
@@ -143,7 +184,7 @@ export async function runVerification({ mode = 'PAPER', configPath = null } = {}
     }
   }
   const positionProblems = [];
-  for (const p of positions) {
+  for (const p of ledgerPositions) {
     if (p.status !== 'OPEN') continue;
     if (p.quantity < -1e-9) positionProblems.push(`${p.symbol}: negative open quantity ${p.quantity}`);
     const net = netBySymbol.get(p.symbol);
@@ -156,7 +197,8 @@ export async function runVerification({ mode = 'PAPER', configPath = null } = {}
   }
   check(results, 'positions reconcile with their fills', positionProblems.length === 0,
     positionProblems.length === 0
-      ? `${positions.filter((p) => p.status === 'OPEN').length} open position(s) match their fill history`
+      ? `${ledgerPositions.filter((p) => p.status === 'OPEN').length} open position(s) match their fill `
+        + `history (${scopeNote}${ledgerFills.length} fill(s) netted)`
       : positionProblems.slice(0, 5).join('; '));
 
   // ---- 5. orphan fills -----------------------------------------------------

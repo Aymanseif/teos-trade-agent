@@ -93,7 +93,12 @@ export class Heartbeat {
   }
 
   #resolveStatus(agentState) {
-    if (this.#repos.activeStop()) return HEALTH.HALTED;
+    // `sessionStop()`, never `activeStop()`. The health a worker reports has to
+    // be the health of THIS session. An unscoped lookup is broader: in BACKTEST
+    // a run whose own kill switch is clear reported HALTED because an earlier
+    // backtest in the same database had latched a stop, which is a false alarm
+    // about a condition that is not happening.
+    if (this.#repos.sessionStop()) return HEALTH.HALTED;
     if (agentState === 'FAILED') return HEALTH.FAILED;
     if (agentState === 'HALTED') return HEALTH.HALTED;
     if (agentState === 'DEGRADED') return HEALTH.DEGRADED;
