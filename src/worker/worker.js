@@ -83,8 +83,9 @@ export class Worker {
   #hostRecovery = null;
   #strategyId;
   #injectedBroker = null;
+  #seed = null;
 
-  constructor({ config, clock = null, db = null, mode = 'PAPER', logger = null, instanceId = null, strategyId = null, broker = null }) {
+  constructor({ config, clock = null, db = null, mode = 'PAPER', logger = null, instanceId = null, strategyId = null, broker = null, seed = null }) {
     this.#config = config;
     // Time comes from an injected clock and nowhere else. Defaulting to the
     // system clock here means a caller can never accidentally construct a
@@ -95,6 +96,13 @@ export class Worker {
     this.#logger = logger ?? createLogger({ level: 'info', name: 'worker' });
     this.#instanceId = instanceId ?? newInstanceId();
     this.#strategyId = strategyId ?? config.strategies.active;
+    // The seed that drives the BROKER's randomness: slippage jitter, partial
+    // fill ratios, spread noise. It is null for every ordinary caller, which
+    // falls back to `config.market.seed` and therefore behaves EXACTLY as
+    // before. A multi-path study must pass a distinct seed per path, otherwise
+    // every path replays the same execution-noise stream and the runs are not
+    // independent.
+    this.#seed = seed;
     // A pre-built broker is injected by the backtest engine so that BACKTEST
     // and PAPER run the IDENTICAL loop, risk engine, Sentinel, adapter and
     // matching engine, and differ only in where the prices come from and which
@@ -186,7 +194,7 @@ export class Worker {
     } else {
       this.#broker = new MockBroker({
         config: this.#config, clock: this.#clock, repos: this.#repos, account: this.#account, mode: this.#mode,
-        seed: this.#config.market.seed,
+        seed: this.#seed ?? this.#config.market.seed,
         onEvent: (e) => this.#onBrokerEvent(e),
       });
       registerMockBroker(this.#broker);

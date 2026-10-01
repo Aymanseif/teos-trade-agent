@@ -43,8 +43,9 @@ export class BacktestEngine {
   #feed = null;
   #strategyId = null;
   #mode = BACKTEST_MODE;
+  #seed = null;
 
-  constructor({ config, feed, clock = null, logger = null, strategyId = null }) {
+  constructor({ config, feed, clock = null, logger = null, strategyId = null, seed = null }) {
     if (config.mode !== BACKTEST_MODE) {
       throw new Error(`BacktestEngine requires config.mode === 'BACKTEST' (got ${config.mode}). Refusing to mix modes.`);
     }
@@ -52,6 +53,11 @@ export class BacktestEngine {
     this.#clock = clock ?? new ManualClock(0);
     this.#logger = logger ?? createLogger({ level: 'warn', name: 'backtest' });
     this.#strategyId = strategyId ?? config.strategies.active;
+    // The history seed and the broker seed are the same value. The history
+    // generator already received it; without forwarding it here the broker
+    // would fall back to `config.market.seed` and every path in a multi-seed
+    // study would share one execution-noise stream.
+    this.#seed = seed;
     this.#feed = feed;
   }
 
@@ -84,6 +90,7 @@ export class BacktestEngine {
     const worker = new Worker({
       config: this.#config, clock, mode: this.#mode,
       logger: this.#logger, strategyId: this.#strategyId,
+      seed: this.#seed,
     });
     this.#worker = worker;
     const boot = worker.start({ resume: false });
@@ -193,7 +200,7 @@ export async function runBacktest({ config, ticks, seed = null, strategyId = nul
   const { generateHistory, ReplayFeed } = await import('./replay-feed.js');
   const history = generateHistory({ config, ticks, seed });
   const feed = new ReplayFeed(history, config);
-  const engine = new BacktestEngine({ config, feed, strategyId, logger });
+  const engine = new BacktestEngine({ config, feed, strategyId, logger, seed });
   return engine.run({ maxTicks, persist });
 }
 
