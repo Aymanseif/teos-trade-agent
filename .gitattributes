@@ -1,0 +1,31 @@
+# ---------------------------------------------------------------------------
+# TEOS Trade Agent - line ending policy
+# ---------------------------------------------------------------------------
+# WHY THIS FILE EXISTS
+#
+# `npm run build` generates `public/` from `src/dashboard/public/`. For the
+# generated file to be reproducible, the source it is generated from has to
+# have the same line endings on every machine and on every CI runner. Without a
+# policy here, git decides that per developer via `core.autocrlf`, so a Windows
+# checkout gets CRLF, a Linux checkout (including Vercel's build) gets LF, and
+# the same commit produces two different `public/index.html` files.
+#
+# That is not hypothetical. `scripts/build.js` originally inserted two lines
+# using a hard-coded `\n` while the surrounding file was CRLF, producing a file
+# with 141 CRLF and 2 bare LF. It passed every test in the repository, because
+# the drift checks byte-compared only the *verbatim* copies and never the
+# *patched* file. It was found in a second clone on a different filesystem.
+#
+# The scope below is deliberately narrow. Only the paths the build generates
+# from, and the build output itself, are pinned. The rest of the repository is
+# left alone, because normalising every tracked file would bury the real change
+# in a repository-wide diff and touch code that has nothing to do with the
+# deployment.
+#
+# `eol=lf` pins the working-tree form as well as the repository form, so a
+# Windows developer checking these paths out gets LF and produces byte-identical
+# output to a Linux CI runner.
+
+/src/dashboard/public/**  text eol=lf
+/src/vercel/public/**     text eol=lf
+/public/**                text eol=lf

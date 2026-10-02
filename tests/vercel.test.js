@@ -37,6 +37,7 @@ import { resetStateCache } from '../src/vercel/state.js';
 import { openDatabase } from '../src/database/db.js';
 import { migrate } from '../src/database/migrate.js';
 import { ManualClock } from '../src/core/clock.js';
+import { patchIndex, assertUniformNewlines } from '../scripts/build.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -562,6 +563,62 @@ describe('the Vercel dashboard', () => {
       const source = readFileSync(join(ROOT, 'src', 'dashboard', 'public', name));
       assert.ok(built.equals(source), `public/${name} has drifted from src/dashboard/public/${name}`);
     }
+  });
+
+  test('the committed index.html is exactly what the build generates', () => {
+    // THE REPRODUCIBILITY TEST. It was missing, and its absence is how a mixed
+    // -line-ending bug survived a full green suite: the drift checks above only
+    // byte-compared the VERBATIM copies and never the PATCHED file.
+    //
+    // Regenerating from source in memory and comparing bytes to the committed
+    // output is the only assertion that catches "the build is stable but does
+    // not produce what is in the repository".
+    const source = readFileSync(join(ROOT, 'src', 'dashboard', 'public', 'index.html'), 'utf8');
+    const expected = Buffer.from(patchIndex(source), 'utf8');
+    const committed = readFileSync(join(ROOT, 'public', 'index.html'));
+    assert.ok(expected.equals(committed),
+      'public/index.html is not what `npm run build` generates - run `npm run build` and commit the result');
+  });
+
+  test('the build emits one line-ending convention, never a mix', () => {
+    // A file with both CRLF and bare LF is not reproducible, is invisible in a
+    // normal diff, and is a real portability hazard on a Linux build runner.
+    for (const rel of ['public/index.html', 'public/app.js', 'public/style.css',
+      'public/vercel-shell.js', 'public/vercel-shell.css']) {
+      const text = readFileSync(join(ROOT, rel), 'utf8');
+      const crlf = (text.match(/\r\n/g) ?? []).length;
+      const bare = (text.match(/(?<!\r)\n/g) ?? []).length;
+      assert.ok(crlf === 0 || bare === 0,
+        `${rel} has mixed line endings (${crlf} CRLF, ${bare} bare LF)`);
+    }
+  });
+
+  test('the patch is a pure function of its input', () => {
+    const source = readFileSync(join(ROOT, 'src', 'dashboard', 'public', 'index.html'), 'utf8');
+    assert.equal(patchIndex(source), patchIndex(source));
+    // And it must be idempotent-safe: applying it twice would double the tags,
+    // which is what would happen if a generated file were ever used as input.
+    assert.notEqual(patchIndex(patchIndex(source)), patchIndex(source));
+  });
+
+  test('the patch refuses to run against markup it does not recognise', () => {
+    assert.throws(() => patchIndex('<html><body>no anchors here</body></html>'),
+      /anchor .* not found/);
+    // Ambiguity is a failure, not a coin flip.
+    assert.throws(() => patchIndex('<head></head><body></body></head>'),
+      /more than once/);
+  });
+
+  test('the patch matches the source file line endings', () => {
+    const crlf = patchIndex('<html>\r\n<head></head>\r\n<body></body>\r\n</html>');
+    assert.ok(!/(?<!\r)\n/.test(crlf), 'a CRLF source must yield a CRLF output, with no bare LF');
+    assert.equal((crlf.match(/\r\n/g) ?? []).length, 5);
+    const lf = patchIndex('<html>\n<head></head>\n<body></body>\n</html>');
+    assert.ok(!lf.includes('\r'), 'an LF source must yield an LF output');
+    // And a mixed output is a hard failure rather than a silent one.
+    assert.throws(
+      () => assertUniformNewlines('a\r\nb\nc', 'x.html'),
+      /mixed line endings/);
   });
 
   test('the shell tells the truth about what this deployment is', () => {
