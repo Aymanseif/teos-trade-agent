@@ -20,7 +20,12 @@
     "reset": "node src/cli.js reset-stop",
     "hold": "node src/cli.js hold",
     "resume": "node src/cli.js resume",
+    "build": "node scripts/build.js",
+    "vercel:check": "node scripts/vercel-check.js",
+    "vercel:smoke": "node scripts/vercel-smoke.js",
     "test": "node --test --test-reporter=spec \"tests/*.test.js\"",
+    "test:eval": "node --test --test-reporter=spec \"eval/tests/*.test.js\"",
+    "test:all": "node --test --test-reporter=spec \"tests/*.test.js\" \"eval/tests/*.test.js\"",
     "verify": "node scripts/verify.js"
   },
   "dependencies": {},

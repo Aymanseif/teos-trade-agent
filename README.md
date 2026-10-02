@@ -33,6 +33,7 @@ Phase 1 is **paper-only**. It cannot trade real money, and it is built so that i
 - [Measured results](#measured-results)
 - [Operator commands](#operator-commands)
 - [Configuration](#configuration)
+- [Vercel deployment — read-only presentation layer](#vercel-deployment--read-only-presentation-layer)
 - [Documentation](#documentation)
 - [Known gaps and limitations](#known-gaps-and-limitations)
 - [Roadmap to public release](#roadmap-to-public-release)
@@ -174,7 +175,7 @@ Each of these is a test, not a promise.
 ## Testing
 
 ```
-211 tests · 211 pass · 0 fail · 0 skipped · 0 todo
+246 tests · 246 pass · 0 fail · 0 skipped · 0 todo
 ```
 
 Run with `npm test` (`node --test --test-reporter=spec "tests/*.test.js"`).
@@ -198,9 +199,13 @@ Run with `npm test` (`node --test --test-reporter=spec "tests/*.test.js"`).
 | 13 | Database / audit integrity | `tests/scenario-13-database-audit-integrity.test.js` |
 
 Plus required regressions A (`/api/snapshot` succeeds) and B (the mode badge reads the
-real mode), 19 dashboard HTTP-safety tests, 15 execution/determinism tests, and 70 unit
+real mode), 19 dashboard HTTP-safety tests, 15 execution/determinism tests, 70 unit
 tests covering every risk rule and Sentinel rule in isolation, their ordering, the
-audit chain, the repositories, config, SQL arity, and money rounding.
+audit chain, the repositories, config, SQL arity, and money rounding, and **35
+Vercel deployment tests** covering read-only enforcement, method refusal, the
+absence of any trading capability in the import graph, and the refusal to
+fabricate a balance when no database exists (see
+[Vercel deployment](#vercel-deployment--read-only-presentation-layer)).
 
 **Testing principles this suite actually follows:**
 
@@ -297,6 +302,137 @@ Costs are charged, never assumed: 10 bps taker/maker, EGP 0.05 minimum fee, slip
 
 Data lives in `data/`, logs in `logs/`. Both, plus `*.db`, `*.lock` and `.env`, are
 git-ignored.
+
+## Vercel deployment — read-only presentation layer
+
+The Vercel deployment is **not** where the trading happens. It is a read-only
+web/API layer in front of a worker that runs on your own machine.
+
+```
+┌─ YOUR MACHINE ────────────────┐        ┌─ VERCEL ─────────────────┐
+│  worker (24/7, long-running)  │        │  api/[[...slug]].js      │
+│        ↓                      │        │        ↓                 │
+│  engine → risk → Sentinel →  │  HTTP  │  read-only JSON          │
+│  firewall → matching engine   │ ─────► │        ↓                 │
+│        ↓                      │  GET   │  public/ dashboard       │
+│  local SQLite (WAL)           │  only  │  no worker, no database  │
+└───────────────────────────────┘        └──────────────────────────┘
+```
+
+**Vercel is not, and will not be, the persistent trading worker.** A serverless
+function has no persistent disk and no long-lived process, so it cannot hold
+your trading state and cannot run a tick loop.
+
+### What the Vercel deployment does
+
+- Serves the existing dashboard (same HTML, same CSS, same rendering code — the
+  build copies them from `src/dashboard/public/` byte for byte).
+- Serves JSON projections over paper-trading state.
+- Answers `GET /api/healthz` with the service, version, mode, runtime and
+  deployment status.
+
+### What it does not do
+
+| Property | Value | Why |
+|---|---|---|
+| `mode` | `PAPER` | A literal in `src/vercel/identity.js`, not read from config or a database |
+| Starts a worker | `false` | There is no persistent process to start |
+| Persistent SQLite | `false` | A serverless function has no persistent disk |
+| Can place orders | `false` | The import graph cannot reach the broker, the matching engine, the risk engine, the Sentinel or the execution adapter |
+| Write operations | none | Only `GET` and `HEAD` are routed; every other verb gets `405` |
+| Live trading | not implemented | No live execution adapter exists in this repository |
+| Withdrawals | not implemented | No withdrawal code exists in this repository |
+
+### Endpoints
+
+| Method | Path | Returns |
+|---|---|---|
+| `GET` | `/api/healthz` | service, version, `mode`, runtime, deployment status, data state |
+| `GET` | `/api/snapshot` | the full dashboard payload (what the page polls) |
+| `GET` | `/api/section/account` | balances, positions, equity curve, invariants |
+| `GET` | `/api/section/agent` | run, heartbeat, strategy parameters, counters |
+| `GET` | `/api/section/risk` | limits, policy, emergency stops, reconciliation |
+| `GET` | `/api/section/audit` | the four hash chains and their streams |
+| `GET` | `/api/audit/chains` | chain verification only |
+| `GET` | `/api/env` | redacted allow-list of environment variables (names only, values always `null`) |
+| any other method | any path | `405` with `Allow: GET, HEAD` |
+| `GET` | anything else | `404`, JSON |
+
+There are **four** sections, not nine. `/api/section/positions`, `/orders`,
+`/trades`, `/performance`, `/sentinel`, `/market` and `/system` do not exist,
+because this project has no such contracts; exposing them would mean inventing
+data. They return `404` with the list of real sections.
+
+### When there is no data
+
+A serverless function has no database. With no snapshot attached, **every**
+measured value is `null` — no balance, no equity, no exposure, no trades, no
+P&L. The dashboard says:
+
+> No persistent worker data available in this Vercel instance.
+
+That is the designed state, not an error. The page never displays a fabricated
+balance, position, trade or profit figure, and the equity invariant is reported
+as *unevaluated* rather than as *holding* — an invariant over no data is not
+satisfied, it has not been computed.
+
+> This is a deliberate departure from `src/dashboard/api.js`, which falls back to
+> `config.account.startingCapitalEgp` when no balance row is found. That fallback
+> is correct on the local dashboard, where the database exists and may be briefly
+> locked. Applied here it would render **EGP 500** as a measured balance, with a
+> green invariant badge next to it. So the empty path is written out longhand in
+> `src/vercel/empty.js` instead of derived, and there is a test pinning it.
+
+### Optional: supplying a read-only snapshot
+
+If you deliberately place a PAPER SQLite file into the deployment, point
+`TEOS_SNAPSHOT_DB` at it and the read-only projections will read it:
+
+```
+TEOS_SNAPSHOT_DB=/var/task/snapshot/paper.db   # absolute, or relative to the repo root
+```
+
+The file is opened **read-only**. Setting this variable grants no trading
+capability of any kind. Leave it unset and every endpoint returns the explicit
+empty/PAPER payload described above. A configured-but-missing file is reported
+as `snapshot_not_found` rather than silently ignored, and no filesystem path is
+ever echoed into a response.
+
+### Environment variables
+
+The Vercel deployment requires **no environment variables**. It needs no API
+key, no database URL and no secret. It actively refuses to serve if a credential
+variable is set (`503`, `status: refused`) — see `.env.example` for the full
+list, all of which must be empty.
+
+### Deploying
+
+```bash
+npm install
+npm run build          # generates public/ from src/dashboard/public/
+npm test               # 246 tests
+npm run vercel:check   # 8 deployment gates
+npm run vercel:smoke   # drives the real function over local HTTP
+
+vercel deploy          # requires the Vercel CLI and your own account
+```
+
+`npm run vercel:check` is the gate. It fails on a missing file, an entrypoint
+that will not import, a dashboard asset that has drifted, invalid package
+metadata, **a trading module reachable from the Vercel import graph**, a
+credential-shaped string, a non-GET route that is reachable, or a `vercel.json`
+whose rewrite would shadow the API function.
+
+> This repository has **not** been deployed. There is no live URL, and nothing in
+> this document implies one exists. `npm run vercel:smoke` exercises the function
+> on `127.0.0.1` at an ephemeral port; it proves the code path, not a deployment.
+
+### What this deployment cannot be described as
+
+Not live, not production, not executing real trades, and not profitable. It is a
+PAPER trading system with a read-only web layer. The strategy is currently
+loss-making ([Measured results](#measured-results)), and that is unchanged by
+anything in this section.
 
 ## Documentation
 
