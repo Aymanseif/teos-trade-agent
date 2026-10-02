@@ -594,6 +594,18 @@ exchange connectivity, no real capital, no claim of profitability.
 The strategy loses money on the only long run that has been measured. That is stated
 here on purpose, and it will stay in the README whatever happens next.
 
+## Claude Partner Status
+
+**Registered Member · Claude Partner Network by Anthropic · 2026** (Partner ID: 1780361568323x497175502484803000)
+
+**Credentials**: Claude Partner Badge: Claude Code — earned 2026-Jul-10, expires 2027-Jan-10 (10/10 badge courses completed)
+
+**Assessment**: Claude Partner Badge: Claude Code Assessment — Passed 2026-Jul-09, score 31/34
+
+**Capstone**: Claude Partner Badge: Claude Code Capstone — Completed 2026-Jul-09
+
+**Exam**: Claude Certified Developer - Foundations (CCDV-F) — Registered to take via Pearson VUE through anthropic-partners.skilljar.com (exam pending)
+
 ---
 
 *TEOS Trade Agent — Phase 1. Paper only. Long-only, cash-funded, no leverage, no
