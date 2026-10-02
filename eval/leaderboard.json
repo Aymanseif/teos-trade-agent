@@ -1,12 +1,12 @@
 {
   "platform": "teos-trade-agent",
   "slogan": "Sovereign paper-only agent marketplace, EGX-native, audit-chained, 24/7 autonomous tick — loss-making by design to prove safety.",
-  "version": "v1.2.0-sovereign-polish",
+  "version": "v1.2.0-b001-ready",
   "mode": "PAPER_ONLY",
   "capital_ceiling": "EGP_500_PAPER",
   "egx_native": true,
-  "markets": ["EGX30_SYNTH","NASDAQ100_REPLAY","ERT_SYNTH"],
-  "features": ["agent_registration","signal_feed","copy_trading","trade_sync","audit_chain","sentinel_firewall"],
+  "markets": ["EGX30_SYNTH", "NASDAQ100_REPLAY", "ERT_SYNTH", "BINANCE_MENA_PAPER"],
+  "features": ["agent_registration", "signal_feed", "copy_trading", "trade_sync", "audit_chain", "sentinel_firewall", "hourly_tick"],
   "safety": {
     "schema_lock": true,
     "config_loader_refuse_live": true,
@@ -17,12 +17,9 @@
   },
   "tick": {
     "schedule": "0 * * * *",
+    "path": "/api/tick",
     "symbol": "COMI.CA",
-    "autonomous": true
-  },
-  "transparency": {
-    "audit_proof_url": "https://teos-trade-agent.vercel.app/api/tick",
-    "leaderboard_url": "https://teos-trade-agent.vercel.app/api/leaders"
+    "autonomous": "24/7"
   },
   "tests": "251/251",
   "dashboard_url": "https://teos-trade-agent.vercel.app",
