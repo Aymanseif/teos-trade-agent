@@ -1,0 +1,16 @@
+{
+  "platform": "teos-trade-agent",
+  "version": "1.0.0-paper-sovereign",
+  "mode": "PAPER_ONLY",
+  "capital_ceiling": "EGP_500_PAPER",
+  "markets": ["EGX30_SYNTH","NASDAQ100_REPLAY","ERT_SYNTH","BINANCE_MENA_PAPER"],
+  "features": ["agent_registration","signal_feed","copy_trading","trade_sync","audit_chain","sentinel_firewall"],
+  "safety": {
+    "schema_lock": true,
+    "config_loader_refuse_live": true,
+    "sentinel_refuse_live": true,
+    "no_exchange_connectivity": true,
+    "hash_chained_audit": true
+  },
+  "dashboard_url": "https://teos-trade-agent.vercel.app"
+}
