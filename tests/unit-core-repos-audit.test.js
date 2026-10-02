@@ -93,7 +93,7 @@ const REPOS_INSERT_METHODS = [...REPOS_SRC.matchAll(/^ {2}(insert[A-Z]\w*)\(/gm)
  * A stricter form would match only the statements written one particular way,
  * examine a subset of the file, and report a pass it had not earned.
  */
-const INSERT_RE = /INSERT INTO (\w+)[ \t]*\n?[ \t]*\(([^)]*)\)[ \t]*\n?[ \t]*VALUES[ \t]*\(([^)]*)\)/g;
+const INSERT_RE = /INSERT INTO (\w+)[ \t]*\r?\n?[ \t]*\(([^)]*)\)[ \t]*\r?\n?[ \t]*VALUES[ \t]*\(([^)]*)\)/g;
 
 /** Split a CREATE TABLE body on commas that are not inside a nested list. */
 function splitTopLevel(body) {
